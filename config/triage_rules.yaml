@@ -1,0 +1,137 @@
+# Triage Rules for MS Defender Alerts
+# These rules determine how alerts are prioritized and investigated
+
+severity_levels:
+  informational: 1
+  low: 2
+  medium: 3
+  high: 4
+  critical: 5
+
+# Rule-based triage by alert type and severity
+triage_rules:
+  # Malware-related alerts
+  - alert_type: "Malware"
+    severity: ["high", "critical"]
+    priority: "critical"
+    auto_investigate: true
+    investigation_steps:
+      - "Check file hash reputation"
+      - "Identify affected devices"
+      - "Review execution context and parent processes"
+      - "Check for lateral movement indicators"
+      - "Assess containment requirements"
+
+  - alert_type: "Malware"
+    severity: ["medium", "low"]
+    priority: "medium"
+    auto_investigate: true
+    investigation_steps:
+      - "Check file hash reputation"
+      - "Identify affected devices"
+      - "Review execution context"
+
+  # Phishing and credential theft
+  - alert_type: "Phishing"
+    severity: ["high", "critical"]
+    priority: "critical"
+    auto_investigate: true
+    investigation_steps:
+      - "Identify targeted users"
+      - "Check for credential compromise"
+      - "Review email headers and sender reputation"
+      - "Assess scope of phishing campaign"
+      - "Check for suspicious sign-ins"
+
+  # Suspicious activity
+  - alert_type: "SuspiciousActivity"
+    severity: ["critical", "high"]
+    priority: "high"
+    auto_investigate: true
+    investigation_steps:
+      - "Analyze user/entity behavior patterns"
+      - "Check for privilege escalation"
+      - "Review recent account activities"
+      - "Identify anomalous behaviors"
+
+  # Vulnerability exploitation
+  - alert_type: "Exploit"
+    severity: ["critical", "high"]
+    priority: "critical"
+    auto_investigate: true
+    investigation_steps:
+      - "Identify CVE and patch status"
+      - "Check for successful exploitation"
+      - "Review affected systems"
+      - "Assess blast radius"
+      - "Verify mitigation status"
+
+  # Default rule for unmatched alerts
+  - alert_type: "Default"
+    severity: ["critical", "high"]
+    priority: "high"
+    auto_investigate: true
+    investigation_steps:
+      - "Review alert details"
+      - "Assess potential impact"
+      - "Identify affected resources"
+
+# Investigation templates by priority
+investigation_prompts:
+  critical: |
+    You are a security analyst investigating a CRITICAL security alert.
+
+    Alert Details:
+    {alert_details}
+
+    Based on the following investigation steps:
+    {investigation_steps}
+
+    Provide a thorough investigation report including:
+    1. Summary of the threat
+    2. Potential impact and risk assessment
+    3. Indicators of Compromise (IOCs)
+    4. Recommended immediate actions
+    5. Recommended containment measures
+    6. Long-term remediation steps
+
+    Be specific and actionable in your recommendations.
+
+  high: |
+    You are a security analyst investigating a HIGH priority security alert.
+
+    Alert Details:
+    {alert_details}
+
+    Investigation steps to consider:
+    {investigation_steps}
+
+    Provide an investigation report including:
+    1. Summary of the alert
+    2. Risk assessment
+    3. Key findings
+    4. Recommended actions
+    5. Remediation steps
+
+  medium: |
+    You are a security analyst triaging a MEDIUM priority security alert.
+
+    Alert Details:
+    {alert_details}
+
+    Provide a triage report including:
+    1. Alert summary
+    2. Preliminary risk assessment
+    3. Whether this requires immediate attention
+    4. Suggested next steps
+
+  low: |
+    You are a security analyst reviewing a LOW priority security alert.
+
+    Alert Details:
+    {alert_details}
+
+    Provide a brief assessment including:
+    1. Summary
+    2. Whether this can be closed or needs follow-up
+    3. Any notable observations
