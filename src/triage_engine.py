@@ -120,14 +120,16 @@ class TriageEngine:
     def format_investigation_prompt(
         self,
         triage_result: Dict[str, Any],
-        alert: Dict[str, Any]
+        alert: Dict[str, Any],
+        kql_context: str = ""
     ) -> str:
         """
-        Format investigation prompt with alert details
+        Format investigation prompt with alert details and KQL context
 
         Args:
             triage_result: Result from triage_alert()
             alert: Alert dictionary
+            kql_context: Additional context from KQL queries
 
         Returns:
             Formatted prompt for LLM
@@ -145,7 +147,8 @@ class TriageEngine:
         # Format template
         prompt = template.format(
             alert_details=alert_details,
-            investigation_steps=investigation_steps
+            investigation_steps=investigation_steps,
+            kql_context=kql_context if kql_context else "No additional KQL query results available."
         )
 
         return prompt

@@ -6,8 +6,10 @@ An AI-powered alert investigation agent for Microsoft Defender that automaticall
 
 - **Automated Alert Investigation**: Automatically fetch and investigate alerts from Microsoft Defender
 - **Incident Analysis**: Comprehensive investigation of security incidents
+- **KQL Query Support**: Run KQL queries across Defender Advanced Hunting tables for deep investigation
 - **BYOM Support**: Use your own AI model (OpenAI GPT-4 or Anthropic Claude)
 - **Rule-Based Triage**: Configurable rules based on alert type and severity
+- **15+ Predefined Queries**: Ready-to-use KQL queries for common investigation scenarios
 - **Multiple Report Formats**: Generate reports in JSON, HTML, or Markdown
 - **Rich CLI Interface**: Beautiful command-line interface with progress tracking
 - **Configurable**: Extensive configuration options via environment variables
@@ -72,9 +74,10 @@ You need to register an application in Azure AD and grant it the necessary permi
    - Select **Microsoft Graph**
    - Select **Application permissions**
    - Add the following permissions:
-     - `SecurityAlert.Read.All`
-     - `SecurityIncident.Read.All`
-     - `SecurityEvents.Read.All`
+     - `SecurityAlert.Read.All` (Required: Read alerts)
+     - `SecurityIncident.Read.All` (Required: Read incidents)
+     - `SecurityEvents.Read.All` (Optional: Additional context)
+     - `ThreatHunting.Read.All` (Required for KQL queries: Run Advanced Hunting queries)
    - Click **Grant admin consent**
 
 ### Environment Variables
@@ -192,6 +195,68 @@ Options:
   --help                         Show this message and exit
 ```
 
+### Run KQL Queries
+
+List available predefined queries:
+
+```bash
+python -m src.main run-kql --list-queries
+```
+
+Run a predefined query (interactive prompts for parameters):
+
+```bash
+python -m src.main run-kql --query-name file_hash_investigation
+python -m src.main run-kql --query-name malware_detections
+python -m src.main run-kql --query-name powershell_execution
+```
+
+Run a custom KQL query:
+
+```bash
+python -m src.main run-kql --query "
+DeviceProcessEvents
+| where Timestamp > ago(1d)
+| where FileName =~ 'powershell.exe'
+| take 10
+"
+```
+
+Save KQL results to file:
+
+```bash
+python -m src.main run-kql --query-name network_connections --output results.json
+```
+
+#### run-kql
+
+```
+Options:
+  -c, --config PATH       Path to .env configuration file
+  -q, --query TEXT        KQL query to execute (use quotes for multi-line)
+  -n, --query-name TEXT   Name of predefined query to run
+  -l, --list-queries      List all available predefined queries
+  -o, --output PATH       Save results to JSON file
+  --help                  Show this message and exit
+```
+
+**Available Predefined Queries:**
+- `suspicious_process_activity` - Search for suspicious processes
+- `powershell_execution` - Find PowerShell with specific keywords
+- `file_hash_investigation` - Track files by SHA256 hash
+- `file_activity_by_name` - File operations by name
+- `network_connections` - Connections to domains/IPs
+- `outbound_connections_by_process` - Network connections by process
+- `failed_logins` - Failed login attempts
+- `successful_logins_by_user` - Successful logins
+- `malware_detections` - Antivirus detections
+- `registry_modifications` - Registry changes
+- `email_by_sender` - Emails from sender
+- `email_with_attachments` - Emails with attachments
+- `alerts_for_device` - All alerts for a device
+
+See [KQL_GUIDE.md](KQL_GUIDE.md) for detailed KQL query documentation.
+
 ## Report Formats
 
 ### JSON Report
@@ -248,13 +313,20 @@ DefenderAgent/
    - Categorizes the alert type (Malware, Phishing, Exploit, etc.)
    - Determines priority based on severity and type
    - Selects appropriate investigation steps
+   - Identifies relevant KQL queries to run
 
-3. **Investigation**: For alerts requiring auto-investigation:
-   - A detailed prompt is constructed with alert details and investigation steps
-   - The LLM analyzes the alert and provides detailed findings
+3. **Advanced Hunting** (if KQL enabled):
+   - Extracts entities from alerts (devices, files, users, IPs, etc.)
+   - Runs predefined KQL queries across Defender tables
+   - Gathers additional context from DeviceProcessEvents, DeviceFileEvents, NetworkEvents, etc.
+   - Correlates findings across multiple data sources
+
+4. **Investigation**: For alerts requiring auto-investigation:
+   - A detailed prompt is constructed with alert details, investigation steps, and KQL results
+   - The LLM analyzes all available data and provides detailed findings
    - Recommendations are generated for containment and remediation
 
-4. **Report Generation**: Results are compiled into comprehensive reports in your chosen format(s)
+5. **Report Generation**: Results are compiled into comprehensive reports in your chosen format(s)
 
 ## Security Best Practices
 

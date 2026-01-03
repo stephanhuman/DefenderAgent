@@ -85,12 +85,13 @@ class InvestigationAgent:
 
         return investigation_results
 
-    def _investigate_single_alert(self, alert: Dict[str, Any]) -> Dict[str, Any]:
+    def _investigate_single_alert(self, alert: Dict[str, Any], enable_kql: bool = True) -> Dict[str, Any]:
         """
         Investigate a single alert
 
         Args:
             alert: Alert dictionary from Defender API
+            enable_kql: Whether to run KQL queries for additional context
 
         Returns:
             Investigation result
@@ -110,12 +111,23 @@ class InvestigationAgent:
                 "investigation_report": "Alert does not require automatic investigation based on current rules."
             }
 
-        # Generate investigation prompt
-        prompt = self.triage_engine.format_investigation_prompt(triage_result, alert)
+        # Run KQL queries if enabled
+        kql_context = ""
+        kql_results = {}
+        if enable_kql:
+            kql_results = self._run_kql_queries_for_alert(alert, triage_result)
+            kql_context = self._format_kql_context(kql_results)
+
+        # Generate investigation prompt with KQL context
+        prompt = self.triage_engine.format_investigation_prompt(
+            triage_result,
+            alert,
+            kql_context=kql_context
+        )
 
         # Get LLM analysis
         try:
-            investigation_report = self.llm_client.generate(prompt, max_tokens=2000)
+            investigation_report = self.llm_client.generate(prompt, max_tokens=3000)
         except Exception as e:
             investigation_report = f"Error during LLM investigation: {str(e)}"
 
@@ -131,8 +143,154 @@ class InvestigationAgent:
             "investigation_status": "completed",
             "investigation_report": investigation_report,
             "alert_details": alert,
+            "kql_results": kql_results,
             "timestamp": alert.get("createdDateTime")
         }
+
+    def _run_kql_queries_for_alert(self, alert: Dict[str, Any], triage_result: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Run KQL queries based on alert data and triage result
+
+        Args:
+            alert: Alert dictionary
+            triage_result: Triage result with KQL query list
+
+        Returns:
+            Dictionary of query results
+        """
+        results = {}
+
+        # Extract entities from alert
+        entities = self._extract_alert_entities(alert)
+
+        # Get KQL queries from triage result
+        kql_queries = triage_result.get("kql_queries", [])
+
+        for query_name in kql_queries:
+            try:
+                # Prepare query parameters based on extracted entities
+                params = self._prepare_kql_parameters(query_name, entities)
+
+                # Run the query
+                query_result = self.defender_client.run_predefined_query(query_name, **params)
+
+                # Store results if we got any
+                if query_result.get("results"):
+                    results[query_name] = {
+                        "count": len(query_result["results"]),
+                        "results": query_result["results"][:10],  # Limit to first 10 results
+                        "stats": query_result.get("stats", {})
+                    }
+            except Exception as e:
+                # Log error but continue with other queries
+                self.console.print(f"[yellow]Warning: KQL query '{query_name}' failed: {str(e)}[/yellow]")
+                continue
+
+        return results
+
+    def _extract_alert_entities(self, alert: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract relevant entities from alert for KQL queries"""
+        entities = {
+            "device_name": None,
+            "account_name": None,
+            "file_hash": None,
+            "file_name": None,
+            "ip_address": None,
+            "domain": None,
+            "email": None
+        }
+
+        # Extract from evidence/entities
+        evidence_list = alert.get("evidence", alert.get("entities", []))
+
+        for evidence in evidence_list:
+            evidence_type = evidence.get("@odata.type", "")
+
+            # Device/Host
+            if "device" in evidence_type.lower() or "host" in evidence_type.lower():
+                entities["device_name"] = evidence.get("deviceName") or evidence.get("hostName")
+
+            # User/Account
+            if "user" in evidence_type.lower() or "account" in evidence_type.lower():
+                entities["account_name"] = evidence.get("userPrincipalName") or evidence.get("accountName")
+                if evidence.get("userPrincipalName"):
+                    entities["email"] = evidence["userPrincipalName"]
+
+            # File
+            if "file" in evidence_type.lower():
+                entities["file_hash"] = evidence.get("sha256") or evidence.get("sha1")
+                entities["file_name"] = evidence.get("fileName")
+
+            # IP Address
+            if "ip" in evidence_type.lower():
+                entities["ip_address"] = evidence.get("ipAddress")
+
+            # Domain/URL
+            if "url" in evidence_type.lower() or "domain" in evidence_type.lower():
+                entities["domain"] = evidence.get("domainName") or evidence.get("url")
+
+        return entities
+
+    def _prepare_kql_parameters(self, query_name: str, entities: Dict[str, Any]) -> Dict[str, str]:
+        """Prepare parameters for KQL query based on query name and available entities"""
+        # Default parameters
+        params = {
+            "hours": "24",
+            "limit": "10"
+        }
+
+        # Query-specific parameter mapping
+        if "device" in query_name.lower() or "alerts_for_device" in query_name:
+            params["device_name"] = entities.get("device_name") or "unknown"
+
+        if "file_hash" in query_name:
+            params["file_hash"] = entities.get("file_hash") or ""
+
+        if "file_name" in query_name or "file_activity" in query_name:
+            params["file_name"] = entities.get("file_name") or ""
+
+        if "account" in query_name.lower() or "login" in query_name.lower():
+            params["account_name"] = entities.get("account_name") or ""
+
+        if "email" in query_name:
+            params["sender_email"] = entities.get("email") or ""
+
+        if "network" in query_name:
+            params["domain"] = entities.get("domain") or ""
+            params["ip"] = entities.get("ip_address") or ""
+
+        if "process" in query_name or "powershell" in query_name:
+            params["process_name"] = "powershell.exe"
+            params["indicator"] = ""
+            params["keywords"] = "bypass"
+
+        if "registry" in query_name:
+            params["registry_path"] = "CurrentVersion\\Run"
+
+        return params
+
+    def _format_kql_context(self, kql_results: Dict[str, Any]) -> str:
+        """Format KQL query results for LLM context"""
+        if not kql_results:
+            return ""
+
+        context_parts = ["Additional Context from Advanced Hunting Queries:\n"]
+
+        for query_name, result in kql_results.items():
+            count = result.get("count", 0)
+            context_parts.append(f"\n{query_name.replace('_', ' ').title()}:")
+            context_parts.append(f"  Found {count} results")
+
+            # Add sample results
+            results = result.get("results", [])
+            if results:
+                context_parts.append("  Sample findings:")
+                for i, row in enumerate(results[:3], 1):  # Show top 3
+                    # Format row data
+                    row_str = ", ".join([f"{k}: {v}" for k, v in row.items() if v and k not in ["@odata.type"]])
+                    context_parts.append(f"    {i}. {row_str[:200]}")  # Limit length
+
+        return "\n".join(context_parts)
 
     def investigate_incidents(
         self,
