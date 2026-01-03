@@ -1,0 +1,37 @@
+# Core dependencies
+anthropic>=0.40.0
+python-dotenv>=1.0.0
+pyyaml>=6.0.1
+requests>=2.31.0
+
+# Azure DevOps
+azure-devops>=7.1.0b4
+msrest>=0.7.1
+
+# Git operations
+GitPython>=3.1.40
+
+# Docker SDK
+docker>=7.0.0
+
+# CLI and UI
+click>=8.1.7
+rich>=13.7.0
+colorama>=0.4.6
+
+# Task queue (optional)
+redis>=5.0.1
+celery>=5.3.4
+
+# Utilities
+pydantic>=2.5.0
+tenacity>=8.2.3
+aiohttp>=3.9.1
+
+# Development
+pytest>=7.4.3
+pytest-asyncio>=0.21.1
+pytest-cov>=4.1.0
+black>=23.12.0
+pylint>=3.0.3
+mypy>=1.7.1

@@ -1,0 +1,45 @@
+# Example task configuration file
+# This can be used for more complex task definitions
+
+task:
+  description: |
+    Implement a REST API endpoint for user profile management with the following features:
+    - GET /api/users/{id} - Retrieve user profile
+    - PUT /api/users/{id} - Update user profile
+    - DELETE /api/users/{id} - Delete user account
+
+    Requirements:
+    - Use proper authentication and authorization
+    - Validate input data
+    - Return appropriate HTTP status codes
+    - Add comprehensive error handling
+    - Write unit tests for all endpoints
+
+  repository: "https://dev.azure.com/myorg/myproject/_git/api-service"
+  base_branch: "develop"
+  feature_branch: "feature/user-profile-api"
+
+options:
+  run_tests: true
+  create_pr: true
+  pr_reviewers:
+    - "tech-lead@company.com"
+    - "backend-team@company.com"
+
+  pr_labels:
+    - "backend"
+    - "api"
+    - "enhancement"
+
+agent:
+  model: "claude-sonnet-4-5-20250929"
+  temperature: 0.0
+  max_iterations: 15
+
+git:
+  commit_prefix: "[API]"
+  sign_commits: false
+
+notifications:
+  slack_webhook: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+  email: "dev-team@company.com"
